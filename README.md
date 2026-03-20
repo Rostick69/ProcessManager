@@ -34,11 +34,13 @@
 
 ProcessManagerLab
 │
+
 ├── Models
 
 │   └── ProcessInfo.cs                     // модель данных одного процесса (PID, имя, приоритет, память, потоки, CPU time, affinity, дерево)
 
 │
+
 ├── Services
 
 │   ├── ProcessService.cs                  // главная логика: список процессов, SetPriority, SetAffinity, BuildProcessTree
@@ -46,16 +48,19 @@ ProcessManagerLab
 │   └── ProcessParentHelper.cs             // WMI-запросы для получения ParentProcessId
 
 │
+
 ├── Utilities
 
 │   └── AffinityHelper.cs                  // битовые операции: маска, hex/binary, чекбоксы ядер
 
 │
+
 ├── MainWindow.xaml                        // XAML-интерфейс: TreeView слева, DataGrid справа, подробности снизу
 
 │   └── MainWindow.xaml.cs                 // обработчики событий, таймер, LoadProcessTree, сохранение состояния
 
 │
+
 ├── App.xaml                               // стартовая точка приложения
 
 │   └── App.xaml.cs
