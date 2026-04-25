@@ -229,7 +229,8 @@ namespace ProcessManagerLab
             }
         }
 
-        // Загрузка потоков
+        // Загружает и отображает список потоков выбранного процесса
+        // Показывает ID потока, приоритет, состояние и время CPU
         private void LoadThreads(int pid)
         {
             try
