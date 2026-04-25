@@ -192,7 +192,8 @@ namespace ProcessManagerLab
             _selectedProcess.SavedCoreSelection = _coreCheckBoxes.Select(cb => cb.IsChecked == true).ToArray();
         }
 
-        // Применить Affinity
+        // Применение привязки процесса к выбранным ядрам CPU (Affinity)
+        // Преобразует состояние чекбоксов в битовую маску и применяет её
         private void btnApplyAffinity_Click(object sender, RoutedEventArgs e)
         {
             // Проверяем, что процесс выбран и чекбоксы созданы
