@@ -104,7 +104,8 @@ namespace ProcessManagerLab
             LoadProcesses();
         }
 
-        // Когда выбран процесс в таблице
+        // Обработчик выбора процесса в таблице
+        // Обновляет панель подробностей, чекбоксы Affinity и таблицу потоков
         private void dgProcesses_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (dgProcesses.SelectedItem is ProcessInfo selected)
