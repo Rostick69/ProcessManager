@@ -141,7 +141,8 @@ namespace ProcessManagerLab
             }
         }
 
-        // Изменение приоритета
+        // Изменение приоритета выбранного процесса
+        // Содержит проверку на RealTime и обработку ошибок доступа
         private void btnSetPriority_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedProcess == null || !(cbPriority.SelectedValue is ProcessPriorityClass newPriority))
