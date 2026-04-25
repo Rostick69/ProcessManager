@@ -1,4 +1,8 @@
-﻿using System;
+﻿// ========================================================
+// Лабораторная работа №2
+// Диспетчер процессов с управлением приоритетами и CPU Affinity
+// ========================================================
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
