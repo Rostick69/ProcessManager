@@ -43,6 +43,8 @@ namespace ProcessManagerLab
             _timer.Start();
         }
 
+        // Загружает список всех процессов и обновляет DataGrid
+        // Также сохраняет выбранный процесс при обновлении
         private void LoadProcesses()
         {
             // Запоминаем выбранный PID и маску
