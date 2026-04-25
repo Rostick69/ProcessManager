@@ -13,6 +13,7 @@ using ProcessManagerLab.Utilities;
 
 namespace ProcessManagerLab
 {
+    // Главное окно приложения "Диспетчер процессов"
     public partial class MainWindow : Window
     {
         private readonly ProcessService _service = new ProcessService();
