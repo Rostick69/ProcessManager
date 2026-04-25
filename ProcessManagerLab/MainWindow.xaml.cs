@@ -257,8 +257,8 @@ namespace ProcessManagerLab
             }
         }
 
-        // ====================== ДЕРЕВО ПРОЦЕССОВ ======================
-
+        // Построение дерева иерархии процессов
+        // Использует WMI для получения ParentProcessId и рекурсивно заполняет TreeView
         private void LoadProcessTree()
         {
             tvProcessTree.Items.Clear();
