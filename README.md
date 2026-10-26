@@ -1,9 +1,9 @@
-﻿# Диспетчер процессов — Лабораторная работа №2
+# Диспетчер процессов — Лабораторная работа №2
 
 **WPF-приложение для управления процессами Windows**  
 с изменением приоритета, привязкой к ядрам и деревом иерархии 🚀
 
-<img width="1225" height="806" alt="image" src="https://github.com/user-attachments/assets/a8ca487c-28ab-4a92-bba4-bf9732e53b76" />
+![Главное окно](docs/screenshots/pm_tree.png)
 
 ## Что умеет приложение
 
@@ -24,7 +24,7 @@
 1. Откройте **Visual Studio** (Community 2022 или новее)  
 2. Установите .NET Framework 4.8 (если не установлен)  
 3. Откройте файл решения: `ProcessManagerLab.slnx`  
-4. Нажмите **F5** (для управления системными процессами запускайте Visual Studio от имени администратора)
+4. Нажмите **F5** или запустите `ProcessManagerLab\bin\Debug\ProcessManagerLab.exe` (для управления системными процессами — от имени администратора)
 
 ## Требования
 
@@ -33,44 +33,32 @@
 - **Операционная система:** Windows 10 / Windows 11
 - **Дополнительная сборка:** System.Management (для WMI-запросов)
 
-## Структура проекта 
+## Структура проекта
 
-ProcessManagerLab
-│
+```text
+ProcessManagerLab/
+├── Models/
+│   ├── ProcessInfo.cs          модель процесса (PID, имя, приоритет, память, потоки, CPU, affinity, дети)
+│   ├── ThreadInfo.cs           модель потока
+│   └── ChartBar.cs             столбец диаграммы
+├── Services/
+│   ├── ProcessService.cs       список процессов, SetPriority, SetAffinity, Kill, потоки, загрузка ядер
+│   └── ProcessParentHelper.cs  WMI: ParentProcessId всех процессов одним запросом
+├── Utilities/
+│   └── AffinityHelper.cs       битовая маска ядер: двоичный и 16-ричный вид
+├── MainWindow.xaml(.cs)        интерфейс: дерево, таблица, вкладки управления и диаграммы
+└── App.xaml(.cs)               точка входа
+```
 
-├── Models
+## Скриншоты
 
-│   ├── ProcessInfo.cs                     // модель процесса (PID, имя, приоритет, память, потоки, CPU, affinity, дети)
+| Привязка к ядрам (CPU Affinity) | Загрузка по ядрам |
+|------|------|
+| ![Affinity](docs/screenshots/pm_affinity.png) | ![Ядра](docs/screenshots/pm_cores.png) |
 
-│   ├── ThreadInfo.cs                      // модель потока
+## Отчёт
 
-│   └── ChartBar.cs                        // столбец диаграммы
-
-│
-
-├── Services
-
-│   ├── ProcessService.cs                  // список процессов, SetPriority, SetAffinity, Kill, потоки, загрузка ядер
-
-│   └── ProcessParentHelper.cs             // WMI: ParentProcessId всех процессов одним запросом
-
-│
-
-├── Utilities
-
-│   └── AffinityHelper.cs                  // битовые операции: маска, hex/binary, чекбоксы ядер
-
-│
-
-├── MainWindow.xaml                        // XAML-интерфейс: TreeView слева, DataGrid справа, подробности снизу
-
-│   └── MainWindow.xaml.cs                 // обновление в фоне, фильтры, дерево, приоритет, affinity, диаграммы
-
-│
-
-├── App.xaml                               // стартовая точка приложения
-
-│   └── App.xaml.cs
+[docs/Отчёт_лаба2.docx](docs/Отчёт_лаба2.docx)
 
 ## Автор
 
