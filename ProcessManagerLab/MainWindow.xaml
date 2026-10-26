@@ -1,131 +1,188 @@
 ﻿<Window x:Class="ProcessManagerLab.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Диспетчер процессов - Лабораторная 2" 
-        Height="850" Width="1250">
+        Title="Диспетчер процессов — Лабораторная работа №2"
+        Height="880" Width="1280" WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- Шаблон столбца диаграммы: подпись, полоса и значение -->
+        <DataTemplate x:Key="BarTemplate">
+            <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                <Rectangle Grid.Column="1" Height="16" Width="{Binding BarLength}" Fill="#3B82F6" HorizontalAlignment="Left"/>
+                <TextBlock Grid.Column="2" Text="{Binding ValueText}" Margin="6,0,0,0" VerticalAlignment="Center"/>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
 
     <Grid Margin="10">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="340"/>
-            <!-- Дерево процессов -->
+            <ColumnDefinition Width="330"/>
             <ColumnDefinition Width="*"/>
-            <!-- Таблица + подробности -->
         </Grid.ColumnDefinitions>
-
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- Кнопки сверху -->
             <RowDefinition Height="*"/>
-            <!-- Основная область -->
+            <RowDefinition Height="330"/>
             <RowDefinition Height="Auto"/>
-            <!-- Подробности снизу -->
         </Grid.RowDefinitions>
 
-        <!-- ==================== КНОПКИ СВЕРХУ ==================== -->
+        <!-- ==================== ПАНЕЛЬ ИНСТРУМЕНТОВ ==================== -->
         <StackPanel Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button x:Name="btnRefresh" 
-                    Content="Обновить список" 
-                    Width="150" 
-                    Height="30" 
-                    Click="btnRefresh_Click"/>
+            <Button x:Name="btnRefresh" Content="Обновить" Width="100" Height="28" Click="btnRefresh_Click"/>
 
-            <TextBlock VerticalAlignment="Center" Margin="15,0,5,0">Процессов найдено:</TextBlock>
-            <TextBlock x:Name="tbCount" 
-                       VerticalAlignment="Center" 
-                       FontWeight="Bold" 
-                       FontSize="14"/>
+            <TextBlock Text="Поиск:" VerticalAlignment="Center" Margin="15,0,5,0"/>
+            <TextBox x:Name="txtSearch" Width="170" Height="26" VerticalContentAlignment="Center"
+                     TextChanged="txtSearch_TextChanged" ToolTip="Поиск по имени процесса"/>
+
+            <TextBlock Text="Показать:" VerticalAlignment="Center" Margin="15,0,5,0"/>
+            <ComboBox x:Name="cbFilter" Width="160" Height="26" SelectedIndex="0" SelectionChanged="cbFilter_SelectionChanged">
+                <ComboBoxItem Content="Все процессы"/>
+                <ComboBoxItem Content="Только с окнами (GUI)"/>
+                <ComboBoxItem Content="Только системные"/>
+            </ComboBox>
+
+            <TextBlock Text="Обновлять каждые:" VerticalAlignment="Center" Margin="15,0,5,0"/>
+            <ComboBox x:Name="cbInterval" Width="70" Height="26" SelectedIndex="1" SelectionChanged="cbInterval_SelectionChanged">
+                <ComboBoxItem Content="2 с" Tag="2"/>
+                <ComboBoxItem Content="4 с" Tag="4"/>
+                <ComboBoxItem Content="10 с" Tag="10"/>
+                <ComboBoxItem Content="30 с" Tag="30"/>
+            </ComboBox>
+
+            <Button x:Name="btnKill" Content="Завершить процесс" Width="150" Height="28" Margin="15,0,0,0"
+                    Background="#FEE2E2" Click="btnKill_Click"/>
+
+            <TextBlock VerticalAlignment="Center" Margin="15,0,5,0" Text="Показано процессов:"/>
+            <TextBlock x:Name="tbCount" VerticalAlignment="Center" FontWeight="Bold"/>
         </StackPanel>
 
-        <!-- ==================== ДЕРЕВО ПРОЦЕССОВ (слева) ==================== -->
-        <TreeView x:Name="tvProcessTree" 
-                  Grid.Row="1" 
-                  Grid.Column="0" 
-                  Margin="0,0,10,0" 
-                  FontSize="13"/>
+        <!-- ==================== ДЕРЕВО ПРОЦЕССОВ ==================== -->
+        <GroupBox Grid.Row="1" Grid.Column="0" Header="Дерево процессов (родитель → потомки)" Margin="0,0,10,0">
+            <TreeView x:Name="tvProcessTree" FontSize="12"/>
+        </GroupBox>
 
-        <!-- ==================== ТАБЛИЦА ПРОЦЕССОВ (справа) ==================== -->
-        <DataGrid x:Name="dgProcesses" 
-                  Grid.Row="1" 
-                  Grid.Column="1" 
-                  AutoGenerateColumns="False" 
-                  IsReadOnly="True"
-                  SelectionChanged="dgProcesses_SelectionChanged">
+        <!-- ==================== ТАБЛИЦА ПРОЦЕССОВ ==================== -->
+        <DataGrid x:Name="dgProcesses" Grid.Row="1" Grid.Column="1"
+                  AutoGenerateColumns="False" IsReadOnly="True" CanUserSortColumns="True"
+                  SelectionMode="Single" SelectionChanged="dgProcesses_SelectionChanged">
+            <!-- Цветовое выделение процессов с высоким приоритетом -->
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="RealTime">
+                            <Setter Property="Background" Value="#FCA5A5"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="High">
+                            <Setter Property="Background" Value="#FECACA"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="AboveNormal">
+                            <Setter Property="Background" Value="#FEF3C7"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="BelowNormal">
+                            <Setter Property="Background" Value="#E0F2FE"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="Idle">
+                            <Setter Property="Background" Value="#F1F5F9"/>
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding PriorityString}" Value="нет доступа">
+                            <Setter Property="Foreground" Value="#94A3B8"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="PID"        Binding="{Binding Id}"              Width="80"/>
-                <DataGridTextColumn Header="Имя"        Binding="{Binding Name}"            Width="200"/>
-                <DataGridTextColumn Header="Приоритет"  Binding="{Binding PriorityString}"  Width="110"/>
-                <DataGridTextColumn Header="Память, МБ" Binding="{Binding MemoryUsage}"     Width="100"/>
-                <DataGridTextColumn Header="Потоков"    Binding="{Binding ThreadCount}"     Width="80"/>
-                <DataGridTextColumn Header="Время CPU"  Binding="{Binding CpuTime, StringFormat=hh\\:mm\\:ss}" Width="120"/>
+                <DataGridTextColumn Header="PID" Binding="{Binding Id}" Width="70"/>
+                <DataGridTextColumn Header="Имя" Binding="{Binding Name}" Width="190"/>
+                <DataGridTextColumn Header="Приоритет" Binding="{Binding PriorityString}" Width="105"/>
+                <DataGridTextColumn Header="CPU, %" Binding="{Binding CpuPercent, StringFormat={}{0:F1}}" Width="70"/>
+                <DataGridTextColumn Header="Память, МБ" Binding="{Binding MemoryMB}" Width="90"/>
+                <DataGridTextColumn Header="Потоков" Binding="{Binding ThreadCount}" Width="70"/>
+                <DataGridTextColumn Header="Время CPU" Binding="{Binding CpuTimeString}" SortMemberPath="CpuTime" Width="90"/>
+                <DataGridTextColumn Header="Родитель" Binding="{Binding ParentId}" Width="75"/>
+                <DataGridTextColumn Header="Сессия" Binding="{Binding SessionId}" Width="60"/>
             </DataGrid.Columns>
         </DataGrid>
 
-        <!-- ==================== ПОДРОБНОСТИ (снизу) ==================== -->
-        <GroupBox Grid.Row="2" 
-                  Grid.ColumnSpan="2" 
-                  Header="Выбранный процесс" 
-                  Margin="0,15,0,0" 
-                  Padding="12">
+        <!-- ==================== НИЖНЯЯ ПАНЕЛЬ ==================== -->
+        <TabControl Grid.Row="2" Grid.ColumnSpan="2" Margin="0,10,0,0">
 
-            <StackPanel>
+            <!-- Управление выбранным процессом -->
+            <TabItem Header="Выбранный процесс">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="330"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <!-- Основная информация -->
-                <TextBlock x:Name="tbSelectedInfo" 
-                           Text="Выберите процесс в таблице или в дереве" 
-                           FontSize="14" 
-                           Margin="0,0,0,12"/>
-
-                <!-- Приоритет -->
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                    <TextBlock Text="Новый приоритет:" 
-                               VerticalAlignment="Center" 
-                               Margin="0,0,10,0"/>
-                    <ComboBox x:Name="cbPriority" 
-                              Width="170" 
-                              Height="30" 
-                              Margin="0,0,10,0"
-                              DisplayMemberPath="Key"
-                              SelectedValuePath="Value"/>
-                    <Button x:Name="btnSetPriority" 
-                            Content="Применить" 
-                            Width="110" 
-                            Height="30" 
-                            Click="btnSetPriority_Click"/>
-                </StackPanel>
-
-                <!-- CPU Affinity -->
-                <GroupBox Header="CPU Affinity (привязка к ядрам)" Padding="10" Margin="0,0,0,15">
-                    <StackPanel>
-                        <TextBlock x:Name="tbAffinityInfo" 
-                                   Text="Текущая маска: ..." 
-                                   Margin="0,0,0,8" 
-                                   FontWeight="Bold"/>
-                        <StackPanel x:Name="spCores" 
-                                    Orientation="Horizontal" 
-                                    Margin="0,0,0,10"/>
-                        <Button x:Name="btnApplyAffinity" 
-                                Content="Применить привязку к ядрам" 
-                                Width="230" 
-                                Click="btnApplyAffinity_Click"/>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock x:Name="tbSelectedInfo" Text="Выберите процесс в таблице или в дереве"
+                                   FontSize="13" TextWrapping="Wrap"/>
+                        <Button x:Name="btnGoParent" Content="Перейти к родительскому процессу" Margin="0,10,0,0"
+                                HorizontalAlignment="Left" Padding="10,3" IsEnabled="False" Click="btnGoParent_Click"/>
                     </StackPanel>
-                </GroupBox>
 
-                <!-- Потоки -->
-                <GroupBox Header="Потоки процесса">
-                    <DataGrid x:Name="dgThreads" 
-                              AutoGenerateColumns="False" 
-                              IsReadOnly="True" 
-                              Height="180">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Thread ID"   Binding="{Binding Id}" Width="90"/>
-                            <DataGridTextColumn Header="Приоритет"   Binding="{Binding Priority}" Width="130"/>
-                            <DataGridTextColumn Header="Состояние"   Binding="{Binding State}" Width="110"/>
-                            <DataGridTextColumn Header="Время CPU"   Binding="{Binding CpuTime, StringFormat=hh\\:mm\\:ss}" Width="110"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </GroupBox>
+                    <StackPanel Grid.Column="1">
+                        <!-- Приоритет -->
+                        <GroupBox Header="Приоритет процесса" Padding="8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Новый приоритет:" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox x:Name="cbPriority" Width="170" Height="26" Margin="0,0,10,0"
+                                          DisplayMemberPath="Key" SelectedValuePath="Value"/>
+                                <Button x:Name="btnSetPriority" Content="Применить" Width="110" Height="26" Click="btnSetPriority_Click"/>
+                            </StackPanel>
+                        </GroupBox>
 
-            </StackPanel>
-        </GroupBox>
+                        <!-- CPU Affinity -->
+                        <GroupBox Header="CPU Affinity (привязка к ядрам)" Padding="8" Margin="0,10,0,0">
+                            <StackPanel>
+                                <TextBlock x:Name="tbAffinityInfo" Text="Текущая маска: —" FontWeight="Bold" Margin="0,0,0,8"/>
+                                <WrapPanel x:Name="spCores" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Все ядра" Padding="10,3" Margin="0,0,8,0" Click="btnAllCores_Click"/>
+                                    <Button x:Name="btnApplyAffinity" Content="Применить привязку" Padding="10,3" Click="btnApplyAffinity_Click"/>
+                                    <TextBlock x:Name="tbNewMask" VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#475569"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Потоки -->
+            <TabItem Header="Потоки процесса">
+                <DataGrid x:Name="dgThreads" AutoGenerateColumns="False" IsReadOnly="True" Margin="5">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Thread ID" Binding="{Binding Id}" Width="100"/>
+                        <DataGridTextColumn Header="Приоритет" Binding="{Binding Priority}" Width="150"/>
+                        <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="250"/>
+                        <DataGridTextColumn Header="Время CPU" Binding="{Binding CpuTime}" Width="130"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <!-- Загрузка по ядрам -->
+            <TabItem Header="Загрузка CPU по ядрам">
+                <ScrollViewer Margin="10">
+                    <ItemsControl x:Name="icCores" ItemTemplate="{StaticResource BarTemplate}"/>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Память -->
+            <TabItem Header="Память: топ-10 процессов">
+                <ScrollViewer Margin="10">
+                    <ItemsControl x:Name="icMemory" ItemTemplate="{StaticResource BarTemplate}"/>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+
+        <!-- Строка состояния -->
+        <TextBlock x:Name="tbStatus" Grid.Row="3" Grid.ColumnSpan="2" Margin="0,6,0,0" Foreground="#475569"
+                   Text="Загрузка..."/>
     </Grid>
 </Window>
