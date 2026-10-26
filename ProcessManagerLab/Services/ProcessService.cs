@@ -1,120 +1,187 @@
 ﻿using ProcessManagerLab.Models;
-using ProcessManagerLab.Utilities;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Windows;
+using System.Linq;
+using System.Management;
 
 namespace ProcessManagerLab.Services
 {
+    // Работа с процессами через System.Diagnostics.Process.
+    // Методы сервиса не показывают окна сами — ошибки возвращаются вызывающему коду,
+    // а он уже решает, что показать пользователю
     public class ProcessService
     {
-        // Главный метод — возвращает список всех процессов, которые мы можем увидеть
+        // Процессорное время каждого процесса при прошлом обновлении — для расчёта загрузки CPU в %
+        private readonly Dictionary<int, TimeSpan> _previousCpu = new Dictionary<int, TimeSpan>();
+        private DateTime _previousTime = DateTime.UtcNow;
+
+        public int CoreCount => Environment.ProcessorCount;
+
+        // Список всех процессов. Вызывается в фоновом потоке.
+        // Процессы без доступа (System, csrss и т. п.) тоже попадают в список, просто без части полей
         public List<ProcessInfo> GetAllProcesses()
         {
             var list = new List<ProcessInfo>();
+            var parents = ProcessParentHelper.GetAllParents(); // один WMI-запрос на все процессы
 
-            // Получаем ВСЕ процессы в системе
-            Process[] processes = Process.GetProcesses();
+            DateTime now = DateTime.UtcNow;
+            double elapsedMs = Math.Max((now - _previousTime).TotalMilliseconds, 1);
+            _previousTime = now;
 
-            foreach (Process p in processes)
+            foreach (Process p in Process.GetProcesses())
             {
-                try
+                using (p)
                 {
-                    // Некоторые системные процессы мы не можем прочитать — будет исключение
-                    // Поэтому оборачиваем в try-catch и просто пропускаем проблемные
-                    list.Add(new ProcessInfo
+                    var info = new ProcessInfo
                     {
+                        // Эти поля берутся из общего снимка системы и доступны для любого процесса
                         Id = p.Id,
                         Name = p.ProcessName,
-                        Priority = p.PriorityClass,  // Теперь настоящий enum
-                        MemoryUsage = p.WorkingSet64 / 1024 / 1024, // переводим байты в мегабайты — удобнее читать
-                        ThreadCount = p.Threads.Count,
-                        CpuTime = p.TotalProcessorTime,         // уже готовый TimeSpan
-                        CoreCount = Environment.ProcessorCount,
-                        ProcessorAffinity = p.ProcessorAffinity,
-                        AffinityMaskString = Utilities.AffinityHelper.GetMaskAsString(p.ProcessorAffinity, Environment.ProcessorCount)
-                    });
-                }
-                catch
-                {
-                    // Просто пропускаем процесс, если нет доступа
-                    // (часто это системные процессы типа csrss, smss и т.д.)
+                        SessionId = SafeGet(() => p.SessionId, 0),
+                        MemoryMB = SafeGet(() => p.WorkingSet64, 0L) / 1024 / 1024,
+                        ThreadCount = SafeGet(() => p.Threads.Count, 0),
+                        ParentId = parents.TryGetValue(p.Id, out int parent) ? parent : 0
+                    };
+
+                    // Для этих полей нужно открыть процесс — у системных процессов будет отказ в доступе
+                    try { info.Priority = p.PriorityClass; } catch (Win32Exception) { } catch (InvalidOperationException) { }
+                    try { info.ProcessorAffinity = p.ProcessorAffinity; } catch (Win32Exception) { } catch (InvalidOperationException) { }
+                    try { info.HasWindow = p.MainWindowHandle != IntPtr.Zero; } catch (InvalidOperationException) { }
+
+                    try
+                    {
+                        TimeSpan cpu = p.TotalProcessorTime;
+                        info.CpuTime = cpu;
+                        // Загрузка = процессорное время за интервал / (интервал * число ядер)
+                        if (_previousCpu.TryGetValue(p.Id, out TimeSpan prev))
+                            info.CpuPercent = Math.Min(100, (cpu - prev).TotalMilliseconds / (elapsedMs * CoreCount) * 100);
+                        _previousCpu[p.Id] = cpu;
+                    }
+                    catch (Win32Exception) { }
+                    catch (InvalidOperationException) { }
+
+                    list.Add(info);
                 }
             }
+
+            // Удаляем из словаря завершившиеся процессы
+            var alive = new HashSet<int>(list.Select(x => x.Id));
+            foreach (int pid in _previousCpu.Keys.Where(k => !alive.Contains(k)).ToList())
+                _previousCpu.Remove(pid);
 
             return list;
         }
-        public bool SetProcessPriority(int processId, ProcessPriorityClass newPriority)
+
+        private static T SafeGet<T>(Func<T> getter, T fallback)
         {
-            try
-            {
-                var process = Process.GetProcessById(processId);  // Находим процесс по PID
-                process.PriorityClass = newPriority;             // Меняем приоритет
-                return true;                                     // Успех
-            }
-            catch (Exception ex)
-            {
-                // Ошибки: обычно Win32Exception (нет прав) или InvalidOperation (процесс умер)
-                MessageBox.Show($"Ошибка изменения приоритета: {ex.Message}");
-                return false;
-            }
+            try { return getter(); }
+            catch { return fallback; }
         }
-        // Получаем текущую маску и количество ядер
-        public (IntPtr affinity, int coreCount) GetProcessorAffinity(int processId)
+
+        // Изменение приоритета. Возвращает null при успехе или текст ошибки
+        public string SetPriority(int pid, ProcessPriorityClass priority)
         {
             try
             {
-                var process = Process.GetProcessById(processId);
-                return (process.ProcessorAffinity, Environment.ProcessorCount);
+                using (var p = Process.GetProcessById(pid))
+                {
+                    p.PriorityClass = priority;
+                    // Без прав администратора Windows может молча заменить RealTime на High — проверяем
+                    p.Refresh();
+                    if (priority == ProcessPriorityClass.RealTime && p.PriorityClass != ProcessPriorityClass.RealTime)
+                        return $"Windows установила приоритет {p.PriorityClass} вместо RealTime (нужны права администратора)";
+                }
+                return null;
+            }
+            catch (Win32Exception ex) { return "Недостаточно прав: " + ex.Message; }
+            catch (InvalidOperationException) { return "Процесс уже завершился"; }
+            catch (ArgumentException) { return "Процесс с таким PID не найден"; }
+        }
+
+        // Изменение CPU Affinity. Возвращает null при успехе или текст ошибки
+        public string SetAffinity(int pid, IntPtr mask)
+        {
+            if (mask == IntPtr.Zero)
+                return "Нужно выбрать хотя бы одно ядро";
+            try
+            {
+                using (var p = Process.GetProcessById(pid))
+                    p.ProcessorAffinity = mask;
+                return null;
+            }
+            catch (Win32Exception ex) { return "Недостаточно прав: " + ex.Message; }
+            catch (InvalidOperationException) { return "Процесс уже завершился"; }
+            catch (ArgumentException) { return "Процесс с таким PID не найден"; }
+        }
+
+        // Завершение процесса. Возвращает null при успехе или текст ошибки
+        public string Kill(int pid)
+        {
+            try
+            {
+                using (var p = Process.GetProcessById(pid))
+                {
+                    p.Kill();
+                    p.WaitForExit(3000);
+                }
+                return null;
+            }
+            catch (Win32Exception ex) { return "Недостаточно прав: " + ex.Message; }
+            catch (InvalidOperationException) { return "Процесс уже завершился"; }
+            catch (ArgumentException) { return "Процесс с таким PID не найден"; }
+        }
+
+        // Список потоков процесса
+        public List<ThreadInfo> GetThreads(int pid)
+        {
+            var result = new List<ThreadInfo>();
+            try
+            {
+                using (var p = Process.GetProcessById(pid))
+                {
+                    foreach (ProcessThread t in p.Threads)
+                    {
+                        var ti = new ThreadInfo { Id = t.Id, State = t.ThreadState.ToString() };
+                        // Приоритет и время потока тоже могут быть недоступны без прав
+                        try { ti.Priority = t.PriorityLevel.ToString(); } catch { ti.Priority = "нет доступа"; }
+                        try { ti.CpuTime = t.TotalProcessorTime.ToString(@"hh\:mm\:ss\.ff"); } catch { ti.CpuTime = "—"; }
+                        if (t.ThreadState == ThreadState.Wait)
+                            ti.State += $" ({t.WaitReason})";
+                        result.Add(ti);
+                    }
+                }
             }
             catch
             {
-                return (new IntPtr(0), Environment.ProcessorCount);
+                // Процесс завершился или нет доступа — вернём пустой список
             }
+            return result;
         }
 
-        // Меняем CPU Affinity
-        public bool SetProcessorAffinity(int processId, IntPtr newMask)
+        // Загрузка каждого логического ядра в процентах (WMI, класс Win32_PerfFormattedData_PerfOS_Processor)
+        public List<double> GetCoreLoads()
         {
+            var loads = new double[CoreCount];
             try
             {
-                var process = Process.GetProcessById(processId);
-                process.ProcessorAffinity = newMask;
-                return true;
+                using (var searcher = new ManagementObjectSearcher(
+                    "SELECT Name, PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        string name = obj["Name"]?.ToString();
+                        if (int.TryParse(name, out int core) && core < loads.Length)
+                            loads[core] = Convert.ToDouble(obj["PercentProcessorTime"]);
+                    }
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                MessageBox.Show($"Ошибка изменения CPU Affinity: {ex.Message}\n\n(Часто это значит, что нет прав)");
-                return false;
+                // Счётчики недоступны — покажем нули
             }
-        }
-        public bool SetPriority(int pid, ProcessPriorityClass priority)
-        {
-            try
-            {
-                Process.GetProcessById(pid).PriorityClass = priority;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка изменения приоритета:\n{ex.Message}");
-                return false;
-            }
-        }
-
-        public bool SetAffinity(int pid, IntPtr mask)
-        {
-            try
-            {
-                Process.GetProcessById(pid).ProcessorAffinity = mask;
-                return true;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка изменения Affinity:\n{ex.Message}");
-                return false;
-            }
+            return loads.ToList();
         }
     }
 }
